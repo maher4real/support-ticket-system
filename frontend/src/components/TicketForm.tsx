@@ -40,6 +40,7 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
   const [classifyNotice, setClassifyNotice] = useState<string | null>(null)
 
   const classifyRequestIdRef = useRef(0)
+  const titleRatio = Math.min((title.length / 200) * 100, 100)
 
   useEffect(() => {
     const trimmed = description.trim()
@@ -122,10 +123,16 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
   }
 
   return (
-    <section className="card">
+    <section className="card reveal">
       <div className="card-header">
-        <h2>Create Ticket</h2>
-        {isSuggesting ? <span className="meta-note">Suggesting...</span> : null}
+        <div>
+          <h2>Create Ticket</h2>
+          <p className="card-subtitle">Add clear details for faster resolution</p>
+        </div>
+        <div className={`assistant-chip ${isSuggesting ? 'is-busy' : ''}`}>
+          <span className="assistant-dot" />
+          <span>{isSuggesting ? 'AI suggesting' : 'AI ready'}</span>
+        </div>
       </div>
 
       <form className="ticket-form" onSubmit={handleSubmit}>
@@ -139,7 +146,10 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Short summary"
           />
-          <small className="field-hint">{title.length}/200</small>
+          <div className="meter-track title-track">
+            <div className="meter-fill title-fill" style={{ width: `${titleRatio}%` }} />
+          </div>
+          <small className="field-hint">{title.length}/200 characters</small>
         </label>
 
         <label className="field">
@@ -151,6 +161,9 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Describe the issue"
           />
+          <small className="field-hint">
+            AI suggestions update automatically while you type.
+          </small>
         </label>
 
         <div className="field-grid">

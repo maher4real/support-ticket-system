@@ -32,6 +32,7 @@ function App() {
 
   const [actionError, setActionError] = useState<string | null>(null)
   const [updatingTicketIds, setUpdatingTicketIds] = useState<Set<number>>(new Set())
+  const [now, setNow] = useState(() => new Date())
 
   const ticketsRequestIdRef = useRef(0)
 
@@ -80,6 +81,11 @@ function App() {
     void loadStats()
   }, [loadStats])
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
   const handleTicketCreated = useCallback(async () => {
     setActionError(null)
     await Promise.all([loadTickets(), loadStats()])
@@ -115,20 +121,62 @@ function App() {
     [loadStats, loadTickets, markTicketUpdating],
   )
 
+  const liveTime = now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  const activeFilters =
+    [filters.category, filters.priority, filters.status].filter(Boolean).length +
+    (filters.search.trim() ? 1 : 0)
+  const quickStats = [
+    { label: 'Total tickets', value: stats ? String(stats.total_tickets) : '--' },
+    { label: 'Open now', value: stats ? String(stats.open_tickets) : '--' },
+    {
+      label: 'Avg/day',
+      value: stats ? stats.avg_tickets_per_day.toFixed(1) : '--',
+    },
+    { label: 'Filtered view', value: String(tickets.length) },
+  ]
+
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="container">
-          <h1>Support Ticket System</h1>
+        <div className="container header-row">
+          <div className="brand-block">
+            <p className="eyebrow">Support Desk</p>
+            <h1>Ticket Command Center</h1>
+          </div>
+          <div className="live-pill">
+            <span className="live-dot" />
+            <span>Live {liveTime}</span>
+          </div>
         </div>
       </header>
 
       <main className="container app-main">
+        <section className="hero-strip reveal">
+          <div className="hero-copy">
+            <h2>Capture, classify, and close issues faster</h2>
+            <p>
+              Real-time prioritization with AI-assisted suggestions and instant status
+              updates.
+            </p>
+          </div>
+          <div className="hero-metrics">
+            {quickStats.map((item) => (
+              <article className="metric-chip" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+
         {actionError ? <p className="notice error global-error">{actionError}</p> : null}
         <div className="layout-grid">
           <div className="left-column">
             <TicketForm onTicketCreated={handleTicketCreated} />
-            <StatsCard stats={stats} loading={isStatsLoading} error={statsError} />
           </div>
 
           <div className="right-column">
@@ -137,11 +185,16 @@ function App() {
               loading={isTicketsLoading}
               error={ticketsError}
               filters={filters}
+              activeFilters={activeFilters}
               onFiltersChange={setFilters}
               onStatusChange={handleStatusChange}
               updatingTicketIds={updatingTicketIds}
             />
           </div>
+        </div>
+
+        <div className="stats-dock">
+          <StatsCard stats={stats} loading={isStatsLoading} error={statsError} variant="bar" />
         </div>
       </main>
     </div>

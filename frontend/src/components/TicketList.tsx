@@ -6,6 +6,7 @@ interface TicketListProps {
   loading: boolean
   error: string | null
   filters: TicketFilters
+  activeFilters: number
   onFiltersChange: (next: TicketFilters) => void
   updatingTicketIds: Set<number>
   onStatusChange: (ticketId: number, status: TicketStatus) => Promise<void> | void
@@ -19,12 +20,27 @@ const statusOptions: Array<{ label: string; value: TicketStatus }> = [
 ]
 
 function truncate(text: string): string {
-  if (text.length <= 160) return text
-  return `${text.slice(0, 157)}...`
+  if (text.length <= 220) return text
+  return `${text.slice(0, 217)}...`
 }
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleString()
+}
+
+function formatRelativeTime(value: string): string {
+  const now = Date.now()
+  const then = new Date(value).getTime()
+  const diffMinutes = Math.floor((now - then) / 60000)
+
+  if (diffMinutes < 1) return 'Just now'
+  if (diffMinutes < 60) return `${diffMinutes}m ago`
+
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
 }
 
 export function TicketList({
@@ -32,14 +48,20 @@ export function TicketList({
   loading,
   error,
   filters,
+  activeFilters,
   onFiltersChange,
   updatingTicketIds,
   onStatusChange,
 }: TicketListProps) {
   return (
-    <section className="card">
+    <section className="card reveal">
       <div className="card-header">
-        <h2>Tickets</h2>
+        <div>
+          <h2>Tickets</h2>
+          <p className="card-subtitle">
+            {tickets.length} shown {activeFilters > 0 ? `with ${activeFilters} active filters` : ''}
+          </p>
+        </div>
       </div>
 
       <FiltersBar filters={filters} onChange={onFiltersChange} />
@@ -47,18 +69,39 @@ export function TicketList({
       {loading ? <p className="muted">Loading tickets...</p> : null}
       {error ? <p className="notice error">{error}</p> : null}
 
-      {!loading && !error && tickets.length === 0 ? (
-        <p className="empty-state">No tickets yet.</p>
-      ) : null}
-
       <div className="tickets-list">
+        {loading
+          ? Array.from({ length: 3 }, (_, index) => (
+              <article className="ticket-item ticket-skeleton" key={index}>
+                <div className="skeleton-line skeleton-title" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line skeleton-short" />
+                <div className="skeleton-pills">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </article>
+            ))
+          : null}
+
+        {!loading && !error && tickets.length === 0 ? (
+          <p className="empty-state">No tickets yet. Create your first issue on the left.</p>
+        ) : null}
+
         {tickets.map((ticket) => {
           const isUpdating = updatingTicketIds.has(ticket.id)
           return (
-            <article className="ticket-item" key={ticket.id}>
+            <article
+              className="ticket-item ticket-animated"
+              key={ticket.id}
+              style={{ animationDelay: `${ticket.id % 7}00ms` }}
+            >
               <div className="ticket-item-head">
                 <h3>{ticket.title}</h3>
-                <span className="ticket-created">{formatDate(ticket.created_at)}</span>
+                <time className="ticket-created" title={formatDate(ticket.created_at)}>
+                  {formatRelativeTime(ticket.created_at)}
+                </time>
               </div>
 
               <p className="ticket-description">{truncate(ticket.description)}</p>

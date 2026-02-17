@@ -1,11 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
 :root {
-  font-family: 'Manrope', 'Segoe UI', 'Trebuchet MS', sans-serif;
-  line-height: 1.45;
-  font-weight: 500;
+  font-family: 'Outfit', 'Avenir Next', 'Trebuchet MS', sans-serif;
+  line-height: 1.55;
+  font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: #101b2d;
+
+  --bg-base: #eef2f7;
+  --bg-layer: #e8eef7;
+  --surface-main: #f8fbff;
+  --surface-strong: #f2f7fd;
+  --surface-contrast: #ffffff;
+  --text-main: #0f1d31;
+  --text-subtle: #43556c;
+  --border-main: #cbd7e4;
+  --border-soft: #d7e1eb;
+  --shadow-soft: 0 14px 28px rgba(15, 31, 53, 0.08);
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Outfit', 'Avenir Next', 'Trebuchet MS', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.005em;
 }
 
 *,
@@ -17,8 +39,12 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f7f7f8;
-  color: #111827;
+  background:
+    radial-gradient(circle at 15% -5%, #dbe8f7 0%, transparent 36%),
+    radial-gradient(circle at 85% 0%, #e8eaf8 0%, transparent 35%),
+    linear-gradient(180deg, var(--bg-layer) 0%, var(--bg-base) 52%, #e6edf6 100%);
+  color: var(--text-main);
+  font-size: 16px;
 }
 
 #root {
