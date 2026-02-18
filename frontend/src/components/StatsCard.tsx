@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { TicketCategory, TicketPriority, TicketStats } from '../api'
+import type {
+  TicketCategory,
+  TicketPriority,
+  TicketSentiment,
+  TicketStats,
+} from '../api'
 
 interface StatsCardProps {
   stats: TicketStats | null
@@ -55,6 +60,13 @@ const categoryLabels: Record<TicketCategory, string> = {
   general: 'General',
 }
 
+const sentimentLabels: Record<TicketSentiment, string> = {
+  calm: 'Calm',
+  neutral: 'Neutral',
+  frustrated: 'Frustrated',
+  angry: 'Angry',
+}
+
 export function StatsCard({
   stats,
   loading,
@@ -64,6 +76,7 @@ export function StatsCard({
   const totalTickets = useAnimatedNumber(stats?.total_tickets ?? 0)
   const openTickets = useAnimatedNumber(stats?.open_tickets ?? 0)
   const averagePerDay = useAnimatedNumber(stats?.avg_tickets_per_day ?? 0, 1)
+  const averageUrgencyScore = useAnimatedNumber(stats?.avg_urgency_score ?? 0, 1)
 
   const priorityEntries = stats
     ? (Object.entries(stats.priority_breakdown) as Array<[TicketPriority, number]>)
@@ -71,9 +84,15 @@ export function StatsCard({
   const categoryEntries = stats
     ? (Object.entries(stats.category_breakdown) as Array<[TicketCategory, number]>)
     : []
+  const sentimentEntries = stats?.sentiment_breakdown
+    ? (Object.entries(stats.sentiment_breakdown) as Array<[TicketSentiment, number]>)
+    : []
 
   const priorityTotal = priorityEntries.reduce((total, [, value]) => total + value, 0)
   const categoryTotal = categoryEntries.reduce((total, [, value]) => total + value, 0)
+  const sentimentTotal = sentimentEntries.reduce((total, [, value]) => total + value, 0)
+  const hasUrgencyScore = typeof stats?.avg_urgency_score === 'number'
+  const hasSentimentBreakdown = sentimentEntries.length > 0
   const isBar = variant === 'bar'
 
   return (
@@ -121,6 +140,12 @@ export function StatsCard({
               <span>Average / Day</span>
               <strong>{averagePerDay.toFixed(1)}</strong>
             </article>
+            {hasUrgencyScore ? (
+              <article className="stat-tile">
+                <span>Avg Urgency</span>
+                <strong>{averageUrgencyScore.toFixed(1)}</strong>
+              </article>
+            ) : null}
           </div>
 
           {isBar ? (
@@ -141,6 +166,16 @@ export function StatsCard({
                   </span>
                 ))}
               </div>
+              {hasSentimentBreakdown ? (
+                <div className="mini-row">
+                  <span className="mini-label">Sentiment</span>
+                  {sentimentEntries.map(([key, value]) => (
+                    <span className="mini-chip" key={key}>
+                      {sentimentLabels[key]}: {value}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="breakdowns">
@@ -183,6 +218,28 @@ export function StatsCard({
                   })}
                 </div>
               </div>
+
+              {hasSentimentBreakdown ? (
+                <div className="breakdown-panel">
+                  <h3>Sentiment</h3>
+                  <div className="breakdown-list">
+                    {sentimentEntries.map(([key, value]) => {
+                      const ratio = sentimentTotal > 0 ? (value / sentimentTotal) * 100 : 0
+                      return (
+                        <article className="breakdown-row" key={key}>
+                          <div className="breakdown-meta">
+                            <span>{sentimentLabels[key]}</span>
+                            <strong>{value}</strong>
+                          </div>
+                          <div className="meter-track">
+                            <div className="meter-fill" style={{ width: `${ratio}%` }} />
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

@@ -110,6 +110,8 @@ export function TicketList({
                 <span className={`badge category-${ticket.category}`}>{ticket.category}</span>
                 <span className={`badge priority-${ticket.priority}`}>{ticket.priority}</span>
                 <span className={`badge status-${ticket.status}`}>{ticket.status}</span>
+                <span className={`badge sentiment-${ticket.sentiment}`}>{ticket.sentiment}</span>
+                <span className="badge urgency-badge">Urgency {ticket.urgency_score}</span>
               </div>
 
               <label className="status-control">

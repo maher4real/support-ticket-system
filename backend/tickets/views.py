@@ -1,98 +1,23 @@
-import json
-import os
-from typing import Any
-
 from django.db.models import Avg, Count, FloatField, Q, Value
 from django.db.models.functions import Cast, Coalesce, TruncDate
-from openai import OpenAI
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .llm_prompt import SYSTEM_PROMPT
 from .models import Ticket
 from .serializers import (
     TicketClassifyRequestSerializer,
     TicketClassifyResponseSerializer,
+    TicketSuggestTitleRequestSerializer,
+    TicketSuggestTitleResponseSerializer,
     TicketSerializer,
 )
-
-DEFAULT_CLASSIFICATION = {
-    "suggested_category": Ticket.Category.GENERAL,
-    "suggested_priority": Ticket.Priority.LOW,
-}
-
-
-def _validate_classification_payload(payload: Any) -> dict[str, str] | None:
-    if not isinstance(payload, dict):
-        return None
-
-    category = payload.get("suggested_category")
-    priority = payload.get("suggested_priority")
-
-    if category not in set(Ticket.Category.values):
-        return None
-    if priority not in set(Ticket.Priority.values):
-        return None
-
-    return {
-        "suggested_category": category,
-        "suggested_priority": priority,
-    }
-
-
-def _classify_with_llm(description: str) -> dict[str, str]:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
-        return DEFAULT_CLASSIFICATION.copy()
-
-    schema = {
-        "name": "ticket_classification",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "suggested_category": {
-                    "type": "string",
-                    "enum": list(Ticket.Category.values),
-                },
-                "suggested_priority": {
-                    "type": "string",
-                    "enum": list(Ticket.Priority.values),
-                },
-            },
-            "required": ["suggested_category", "suggested_priority"],
-            "additionalProperties": False,
-        },
-    }
-
-    try:
-        client = OpenAI(api_key=api_key, timeout=10.0)
-        completion = client.chat.completions.create(
-            model=os.getenv("OPENAI_CLASSIFY_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": description},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": schema,
-            },
-            temperature=0,
-        )
-
-        if not completion.choices:
-            return DEFAULT_CLASSIFICATION.copy()
-
-        content = completion.choices[0].message.content
-        if not content:
-            return DEFAULT_CLASSIFICATION.copy()
-
-        parsed = json.loads(content)
-        validated = _validate_classification_payload(parsed)
-        return validated or DEFAULT_CLASSIFICATION.copy()
-    except Exception:
-        return DEFAULT_CLASSIFICATION.copy()
+from .services.llm import (
+    DEFAULT_CLASSIFICATION,
+    classify_ticket,
+    score_sentiment_urgency,
+    suggest_title as llm_suggest_title,
+)
 
 
 class TicketViewSet(
@@ -109,6 +34,28 @@ class TicketViewSet(
     ordering = ["-created_at"]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
+    def perform_create(self, serializer) -> None:
+        title = serializer.validated_data.get("title", "")
+        description = serializer.validated_data.get("description", "")
+        ai_signals = score_sentiment_urgency(title=title, description=description)
+        serializer.save(**ai_signals)
+
+    def perform_update(self, serializer) -> None:
+        instance = serializer.instance
+        title_changed = "title" in serializer.validated_data
+        description_changed = "description" in serializer.validated_data
+
+        if title_changed or description_changed:
+            title = serializer.validated_data.get("title", instance.title)
+            description = serializer.validated_data.get(
+                "description", instance.description
+            )
+            ai_signals = score_sentiment_urgency(title=title, description=description)
+            serializer.save(**ai_signals)
+            return
+
+        serializer.save()
+
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request) -> Response:
         aggregates = Ticket.objects.aggregate(
@@ -122,6 +69,15 @@ class TicketViewSet(
             category_technical=Count("id", filter=Q(category=Ticket.Category.TECHNICAL)),
             category_account=Count("id", filter=Q(category=Ticket.Category.ACCOUNT)),
             category_general=Count("id", filter=Q(category=Ticket.Category.GENERAL)),
+            sentiment_calm=Count("id", filter=Q(sentiment=Ticket.Sentiment.CALM)),
+            sentiment_neutral=Count(
+                "id", filter=Q(sentiment=Ticket.Sentiment.NEUTRAL)
+            ),
+            sentiment_frustrated=Count(
+                "id", filter=Q(sentiment=Ticket.Sentiment.FRUSTRATED)
+            ),
+            sentiment_angry=Count("id", filter=Q(sentiment=Ticket.Sentiment.ANGRY)),
+            avg_urgency_score=Coalesce(Cast(Avg("urgency_score"), FloatField()), Value(0.0)),
         )
 
         daily_counts = (
@@ -150,6 +106,13 @@ class TicketViewSet(
                     "account": aggregates["category_account"] or 0,
                     "general": aggregates["category_general"] or 0,
                 },
+                "sentiment_breakdown": {
+                    "calm": aggregates["sentiment_calm"] or 0,
+                    "neutral": aggregates["sentiment_neutral"] or 0,
+                    "frustrated": aggregates["sentiment_frustrated"] or 0,
+                    "angry": aggregates["sentiment_angry"] or 0,
+                },
+                "avg_urgency_score": float(aggregates["avg_urgency_score"] or 0.0),
             }
         )
 
@@ -158,11 +121,26 @@ class TicketViewSet(
         request_serializer = TicketClassifyRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
 
-        classification = _classify_with_llm(
-            request_serializer.validated_data["description"]
-        )
+        classification = classify_ticket(request_serializer.validated_data["description"])
         response_serializer = TicketClassifyResponseSerializer(data=classification)
         if not response_serializer.is_valid():
             return Response(DEFAULT_CLASSIFICATION, status=status.HTTP_200_OK)
+
+        return Response(response_serializer.validated_data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="suggest-title")
+    def suggest_title(self, request) -> Response:
+        request_serializer = TicketSuggestTitleRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+
+        suggested_title = llm_suggest_title(request_serializer.validated_data["description"])
+        response_serializer = TicketSuggestTitleResponseSerializer(
+            data={"suggested_title": suggested_title}
+        )
+        if not response_serializer.is_valid():
+            return Response(
+                {"suggested_title": "Support request"},
+                status=status.HTTP_200_OK,
+            )
 
         return Response(response_serializer.validated_data, status=status.HTTP_200_OK)

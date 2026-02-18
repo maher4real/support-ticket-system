@@ -1,6 +1,7 @@
 export type TicketCategory = 'billing' | 'technical' | 'account' | 'general'
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
 export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+export type TicketSentiment = 'calm' | 'neutral' | 'frustrated' | 'angry'
 
 export interface Ticket {
   id: number
@@ -9,6 +10,8 @@ export interface Ticket {
   category: TicketCategory
   priority: TicketPriority
   status: TicketStatus
+  sentiment: TicketSentiment
+  urgency_score: number
   created_at: string
 }
 
@@ -32,6 +35,8 @@ export interface TicketStats {
   avg_tickets_per_day: number
   priority_breakdown: Record<TicketPriority, number>
   category_breakdown: Record<TicketCategory, number>
+  sentiment_breakdown?: Record<TicketSentiment, number>
+  avg_urgency_score?: number
 }
 
 export interface TicketClassification {
@@ -39,19 +44,37 @@ export interface TicketClassification {
   suggested_priority: TicketPriority
 }
 
+export interface TicketTitleSuggestion {
+  suggested_title: string
+}
+
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(
   /\/$/,
   '',
 )
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${baseUrl}/api/${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  })
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 10000): Promise<T> {
+  const controller = new AbortController()
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
+
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/api/${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please try again.')
+    }
+    throw error
+  } finally {
+    globalThis.clearTimeout(timeoutId)
+  }
 
   const contentType = response.headers.get('content-type') ?? ''
   const payload = contentType.includes('application/json')
@@ -92,6 +115,20 @@ export async function classifyTicket(description: string): Promise<TicketClassif
     method: 'POST',
     body: JSON.stringify({ description }),
   })
+}
+
+export async function suggestTitle(
+  description: string,
+  timeoutMs = 4500,
+): Promise<TicketTitleSuggestion> {
+  return request<TicketTitleSuggestion>(
+    'tickets/suggest-title/',
+    {
+      method: 'POST',
+      body: JSON.stringify({ description }),
+    },
+    timeoutMs,
+  )
 }
 
 export async function createTicket(payload: CreateTicketPayload): Promise<Ticket> {

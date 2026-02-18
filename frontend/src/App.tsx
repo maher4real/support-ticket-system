@@ -177,6 +177,7 @@ function App() {
         <div className="layout-grid">
           <div className="left-column">
             <TicketForm onTicketCreated={handleTicketCreated} />
+            <StatsCard stats={stats} loading={isStatsLoading} error={statsError} />
           </div>
 
           <div className="right-column">
@@ -191,10 +192,6 @@ function App() {
               updatingTicketIds={updatingTicketIds}
             />
           </div>
-        </div>
-
-        <div className="stats-dock">
-          <StatsCard stats={stats} loading={isStatsLoading} error={statsError} variant="bar" />
         </div>
       </main>
     </div>

@@ -13,9 +13,11 @@ class TicketSerializer(serializers.ModelSerializer):
             "category",
             "priority",
             "status",
+            "sentiment",
+            "urgency_score",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "created_at", "sentiment", "urgency_score"]
 
     def validate_title(self, value: str) -> str:
         cleaned = value.strip()
@@ -43,3 +45,20 @@ class TicketClassifyRequestSerializer(serializers.Serializer):
 class TicketClassifyResponseSerializer(serializers.Serializer):
     suggested_category = serializers.ChoiceField(choices=Ticket.Category.values)
     suggested_priority = serializers.ChoiceField(choices=Ticket.Priority.values)
+
+
+class TicketSuggestTitleRequestSerializer(serializers.Serializer):
+    description = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+
+class TicketSuggestTitleResponseSerializer(serializers.Serializer):
+    suggested_title = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        trim_whitespace=True,
+        max_length=120,
+    )

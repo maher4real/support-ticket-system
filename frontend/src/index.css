@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
 
 :root {
-  font-family: 'Outfit', 'Avenir Next', 'Trebuchet MS', sans-serif;
+  font-family: 'Inter', 'Google Sans Text', 'Segoe UI', sans-serif;
   line-height: 1.55;
   font-weight: 400;
   font-synthesis: none;
@@ -25,7 +25,7 @@
 h1,
 h2,
 h3 {
-  font-family: 'Outfit', 'Avenir Next', 'Trebuchet MS', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Inter', 'Google Sans Text', sans-serif;
   font-weight: 700;
   letter-spacing: 0.005em;
 }
