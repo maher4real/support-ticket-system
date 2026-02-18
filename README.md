@@ -30,7 +30,7 @@ Main backend files:
 - `backend/tickets/llm_prompt.py` (classify prompt)
 - `backend/tickets/ai_prompts.py` (title + sentiment/urgency prompts)
 
-## Quick Start (Reviewer-Friendly)
+## Quick Start
 ### 1) Configure env
 Use the included template:
 
