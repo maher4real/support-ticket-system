@@ -1,17 +1,61 @@
 # Support Ticket System
 
-## Run
+An end-to-end Support Ticket System built with Django REST Framework, React (Vite), PostgreSQL, and Docker Compose.
+
+This project supports:
+- Ticket creation, listing, filtering, search, and status updates
+- DB-level enforced constraints for all enum/range fields
+- AI-powered category/priority classification
+- AI-powered title suggestion
+- AI-powered sentiment + urgency scoring
+- Live stats dashboard using DB-level aggregation (no Python row loops)
+
+## Tech Stack
+- Backend: Django 5 + Django REST Framework + django-filter
+- Database: PostgreSQL 15
+- Frontend: React + TypeScript + Vite
+- AI: OpenAI API (`gpt-4o-mini` by default, configurable)
+- Infra: Docker + Docker Compose
+
+## Architecture
+- `backend/`: Django project (`config`) + app (`tickets`)
+- `frontend/`: React app (Vite)
+- `docker-compose.yml`: local multi-service orchestration
+
+Main backend files:
+- `backend/tickets/models.py` (Ticket schema + DB constraints)
+- `backend/tickets/views.py` (API endpoints)
+- `backend/tickets/serializers.py` (validation + API shapes)
+- `backend/tickets/services/llm.py` (AI integration, strict schema, fallbacks)
+- `backend/tickets/llm_prompt.py` (classify prompt)
+- `backend/tickets/ai_prompts.py` (title + sentiment/urgency prompts)
+
+## Quick Start (Reviewer-Friendly)
+### 1) Configure env
+Use the included template:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` as needed.
+
+### 2) Run the full stack
+
 ```bash
 docker compose up --build
 ```
 
-## URLs
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
-- Admin: `http://localhost:8000/admin/`
+### 3) Open the app
+- Frontend: [http://localhost:5173](http://localhost:5173)
+- Backend API root: [http://localhost:8000/api/tickets/](http://localhost:8000/api/tickets/)
+- Stats endpoint: [http://localhost:8000/api/tickets/stats/](http://localhost:8000/api/tickets/stats/)
+- Django admin: [http://localhost:8000/admin/](http://localhost:8000/admin/)
+
+These links work once `docker compose up --build` is running successfully.
 
 ## Environment Variables
-Set these in `.env`:
+Set in `.env` (and consumed by Docker Compose):
 
 ```env
 POSTGRES_DB=tickets
@@ -24,107 +68,238 @@ OPENAI_CLASSIFY_MODEL=gpt-4o-mini
 ```
 
 Notes:
-- `.env` is gitignored.
-- `OPENAI_API_KEY` is optional. If missing or classification fails, classify endpoint returns safe defaults.
+- `OPENAI_API_KEY` is optional for local run.
+- If key is missing/unreachable, AI endpoints gracefully fallback and core ticket operations still work.
+- No secrets are hardcoded in source.
 
-## LLM Choice And Design Decisions
-- LLM provider/model: `OpenAI` with `gpt-4o-mini` (configurable through `OPENAI_CLASSIFY_MODEL`).
-- Why this model: low latency and lower cost for short classification tasks while still producing reliable structured JSON.
-- Prompt strategy:
-  - `backend/tickets/llm_prompt.py`: category + priority classification prompt
-  - `backend/tickets/ai_prompts.py`: title suggestion + sentiment/urgency prompts
-- Reliability:
-  - classify endpoint uses strict JSON schema output + server-side validation and always falls back to:
-  - `{"suggested_category":"general","suggested_priority":"low"}`
-  - title suggestion endpoint falls back to first sentence (trimmed) or `"Support request"`
-  - sentiment/urgency scoring falls back to `sentiment="neutral"` and `urgency_score=50`
-  when API key is missing, network fails, API output is invalid, or timeout occurs.
-- UX decision: AI suggestions are non-blocking and user-overridable; ticket creation still works even if LLM fails.
+## Docker Behavior
+`docker-compose.yml` includes:
+- `db` healthcheck with `pg_isready`
+- `backend` depends on healthy DB
+- backend startup runs migrations automatically before server start
+- fixed required ports:
+  - DB: `5432`
+  - Backend: `8000`
+  - Frontend: `5173`
 
-## API Endpoints
-All endpoints are under `/api/`.
+## API Reference
+All APIs are under `/api/`.
 
-### Create Ticket
+### 1) Create Ticket
+`POST /api/tickets/`
+
+Creates a ticket.
+
+Request:
 ```bash
 curl -X POST http://localhost:8000/api/tickets/ \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Cannot login",
-    "description": "I get invalid credentials even after reset",
+    "description": "Users cannot login after password reset",
     "category": "account",
     "priority": "high"
   }'
 ```
 
-### List Tickets (filter + search)
+Response: `201 Created` with ticket JSON (includes `sentiment` and `urgency_score`).
+
+### 2) List Tickets
+`GET /api/tickets/`
+
+Supports:
+- `?category=`
+- `?priority=`
+- `?status=`
+- `?search=` (searches title + description)
+
+Example:
 ```bash
 curl "http://localhost:8000/api/tickets/?category=technical&status=open&search=timeout"
 ```
 
-### Update Ticket Status
+Response: `200 OK`, newest first.
+
+### 3) Update Ticket
+`PATCH /api/tickets/<id>/`
+
+Example:
 ```bash
 curl -X PATCH http://localhost:8000/api/tickets/1/ \
   -H "Content-Type: application/json" \
   -d '{"status":"resolved"}'
 ```
 
-### Stats
+Response: `200 OK`.
+
+AI signal recompute rule:
+- Recomputes sentiment/urgency only if `title` or `description` changed.
+- Status-only patch keeps existing AI scores.
+
+### 4) Stats
+`GET /api/tickets/stats/`
+
+Example:
 ```bash
 curl http://localhost:8000/api/tickets/stats/
 ```
 
-### Classify Description
+Response always includes required shape:
+```json
+{
+  "total_tickets": 0,
+  "open_tickets": 0,
+  "avg_tickets_per_day": 0.0,
+  "priority_breakdown": {
+    "low": 0,
+    "medium": 0,
+    "high": 0,
+    "critical": 0
+  },
+  "category_breakdown": {
+    "billing": 0,
+    "technical": 0,
+    "account": 0,
+    "general": 0
+  }
+}
+```
+
+Extended fields also included:
+- `sentiment_breakdown`
+- `avg_urgency_score`
+
+Implementation uses DB aggregation/annotation (`aggregate`, `annotate`, `TruncDate`, `Avg`, `Count`) and does not loop over ticket rows in Python.
+
+### 5) Classify Description (AI)
+`POST /api/tickets/classify/`
+
+Request:
 ```bash
 curl -X POST http://localhost:8000/api/tickets/classify/ \
   -H "Content-Type: application/json" \
   -d '{"description":"Production checkout fails with 500 for all users"}'
 ```
 
-### Suggest Title
+Response:
+```json
+{
+  "suggested_category": "technical",
+  "suggested_priority": "critical"
+}
+```
+
+Fallback (if no key/API failure/invalid output):
+```json
+{
+  "suggested_category": "general",
+  "suggested_priority": "low"
+}
+```
+
+### 6) Suggest Title (AI)
+`POST /api/tickets/suggest-title/`
+
+Request:
 ```bash
 curl -X POST http://localhost:8000/api/tickets/suggest-title/ \
   -H "Content-Type: application/json" \
   -d '{"description":"Payment was charged twice and invoice totals are incorrect"}'
 ```
 
-## New AI Features
-- AI Title Suggestion:
-  - Frontend form has a `Suggest Title` button (non-spamming single call).
-  - If title is empty/unedited, suggestion auto-fills.
-  - If user already typed a title, UI shows `Apply suggestion` so it is non-destructive.
-- Sentiment + Urgency Scoring:
-  - Backend computes `sentiment` (`calm|neutral|frustrated|angry`) and `urgency_score` (`0..100`) on create.
-  - Backend recomputes only when `title` or `description` changes on update.
-  - Meaning:
-    - `sentiment` reflects tone/frustration in the message.
-    - `urgency_score` reflects urgency/business impact cues (outage/deadline/blocker signals).
+Response:
+```json
+{
+  "suggested_title": "Duplicate Billing and Incorrect Invoice Totals"
+}
+```
 
-## Implementation Notes
-- Ticket constraints are enforced at DB-level with `CheckConstraint`s.
-- Additional DB constraints:
-  - `sentiment` in `calm|neutral|frustrated|angry`
-  - `urgency_score` in range `0..100`
-- Stats use ORM aggregation/annotation only (no per-ticket Python loops).
-- Stats now include:
-  - `sentiment_breakdown`
-  - `avg_urgency_score`
-- Backend applies migrations on container startup.
-- Docker startup is hardened with Postgres healthcheck + backend dependency on `service_healthy`.
-- Frontend Ticket Form includes a non-spamming `Suggest Title` action button.
-- Ticket create and update never fail if AI fails; backend safely falls back.
+Rules:
+- non-empty string
+- preferred short title
+- max length enforced in backend
 
-## Acceptance Checklist
-- [x] Ticket model fields + choices + DB constraints: `backend/tickets/models.py`, `backend/tickets/migrations/0001_initial.py`
-- [x] Sentiment + urgency model fields + DB constraints: `backend/tickets/models.py`, `backend/tickets/migrations/0002_ticket_ai_signals.py`
-- [x] Ticket serializer + clean validation: `backend/tickets/serializers.py`
-- [x] CRUD endpoints (`POST /api/tickets/`, `GET /api/tickets/`, `PATCH /api/tickets/<id>/`): `backend/tickets/views.py`, `backend/tickets/urls.py`
-- [x] Filter/search/order newest first: `backend/tickets/views.py`
-- [x] Stats endpoint shape + full key coverage + DB aggregation: `backend/tickets/views.py`
-- [x] LLM classify endpoint with structured outputs + fallback defaults: `backend/tickets/views.py`, `backend/tickets/llm_prompt.py`
-- [x] LLM title suggestion endpoint: `backend/tickets/views.py`, `backend/tickets/services/llm.py`, `backend/tickets/ai_prompts.py`
-- [x] Sentiment + urgency AI scoring on create/update text edits: `backend/tickets/views.py`, `backend/tickets/services/llm.py`
-- [x] `/api/` URL wiring + admin route: `backend/config/urls.py`
-- [x] Frontend responsive layout + form/list/stats UX states: `frontend/src/App.tsx`, `frontend/src/App.css`, `frontend/src/components/*`
-- [x] Frontend suggest-title UX + sentiment/urgency badges + extended stats rendering: `frontend/src/components/TicketForm.tsx`, `frontend/src/components/TicketList.tsx`, `frontend/src/components/StatsCard.tsx`
-- [x] Frontend API layer: `frontend/src/api.ts`
-- [x] Docker DB readiness gating: `docker-compose.yml`
+Fallback:
+- first sentence trimmed to short length
+- or `"Support request"`
+
+## Data Model + Constraints
+Ticket fields:
+- `title`: required, max 200
+- `description`: required
+- `category`: `billing|technical|account|general`
+- `priority`: `low|medium|high|critical`
+- `status`: `open|in_progress|resolved|closed` (default `open`)
+- `sentiment`: `calm|neutral|frustrated|angry` (default `neutral`)
+- `urgency_score`: integer `0..100` (default `50`)
+- `created_at`: auto timestamp
+
+DB-level checks are enforced using Django `CheckConstraint` migrations.
+
+## AI Integration Details
+Provider/model:
+- OpenAI via env var key
+- default model: `gpt-4o-mini` (override with `OPENAI_CLASSIFY_MODEL`)
+
+Reliability behavior:
+- Structured outputs via JSON schema (`strict: true`)
+- server-side validation after model response
+- timeout + exception handling in all AI service calls
+- safe fallbacks for every AI feature
+- ticket creation/update never fails due to AI issues
+
+Prompt files:
+- classify prompt: `backend/tickets/llm_prompt.py`
+- title/sentiment prompts: `backend/tickets/ai_prompts.py`
+
+## Frontend UX Summary
+- Responsive 2-column desktop layout, stacked mobile layout
+- Ticket form:
+  - title + description required
+  - category/priority dropdowns
+  - AI classify while typing description (debounced)
+  - AI title generation action with non-destructive apply behavior
+- Ticket list:
+  - newest first
+  - filter/search controls
+  - status quick update per ticket
+  - sentiment + urgency badges
+- Stats card:
+  - total/open/avg per day
+  - priority/category breakdown
+  - sentiment breakdown + average urgency score
+
+## Quality + Tests
+Backend tests:
+```bash
+docker compose exec backend python manage.py test
+```
+
+Frontend checks:
+```bash
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run build
+```
+
+## Requirement Coverage Map
+- Model + DB constraints: `backend/tickets/models.py`, `backend/tickets/migrations/0001_initial.py`, `backend/tickets/migrations/0002_ticket_ai_signals.py`
+- CRUD + filters + search + ordering: `backend/tickets/views.py`
+- Stats aggregation (DB-level): `backend/tickets/views.py`
+- AI classify/title/sentiment services: `backend/tickets/services/llm.py`
+- Prompt files: `backend/tickets/llm_prompt.py`, `backend/tickets/ai_prompts.py`
+- Frontend API layer: `frontend/src/api.ts`
+- Frontend UI components: `frontend/src/components/*`, `frontend/src/App.tsx`, `frontend/src/App.css`
+- Docker readiness + env wiring: `docker-compose.yml`, `backend/Dockerfile`
+
+## Troubleshooting
+- If ports are already in use, stop conflicting services and re-run compose.
+- If AI suggestions return fallback values, verify `OPENAI_API_KEY` in `.env` and restart containers.
+- If DB schema mismatch appears, run:
+  ```bash
+  docker compose exec backend python manage.py migrate
+  ```
+
+## Security Notes
+- Do not commit real API keys.
+- `.env` is ignored in git.
+- Use `.env.example` for shared configuration template.
