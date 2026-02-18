@@ -50,7 +50,6 @@ docker compose up --build
 - Frontend: [http://localhost:5173](http://localhost:5173)
 - Backend API root: [http://localhost:8000/api/tickets/](http://localhost:8000/api/tickets/)
 - Stats endpoint: [http://localhost:8000/api/tickets/stats/](http://localhost:8000/api/tickets/stats/)
-- Django admin: [http://localhost:8000/admin/](http://localhost:8000/admin/)
 
 These links work once `docker compose up --build` is running successfully.
 
