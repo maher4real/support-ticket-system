@@ -20,11 +20,21 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
 OPENAI_API_KEY=
+OPENAI_CLASSIFY_MODEL=gpt-4o-mini
 ```
 
 Notes:
 - `.env` is gitignored.
 - `OPENAI_API_KEY` is optional. If missing or classification fails, classify endpoint returns safe defaults.
+
+## LLM Choice And Design Decisions
+- LLM provider/model: `OpenAI` with `gpt-4o-mini` (configurable through `OPENAI_CLASSIFY_MODEL`).
+- Why this model: low latency and lower cost for short classification tasks while still producing reliable structured JSON.
+- Prompt strategy: concise system prompt in `backend/tickets/llm_prompt.py` focused on category + priority classification.
+- Reliability: classify endpoint uses strict JSON schema output + server-side validation and always falls back to:
+  - `{"suggested_category":"general","suggested_priority":"low"}`
+  when API key is missing, network fails, API output is invalid, or timeout occurs.
+- UX decision: frontend suggestions are non-blocking and user-overridable; ticket creation still works even if LLM fails.
 
 ## API Endpoints
 All endpoints are under `/api/`.

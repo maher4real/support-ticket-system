@@ -23,6 +23,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_CLASSIFY_MODEL: ${OPENAI_CLASSIFY_MODEL:-gpt-4o-mini}
     depends_on:
       db:
         condition: service_healthy
