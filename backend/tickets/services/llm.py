@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -8,6 +9,8 @@ from openai import OpenAI
 from tickets.ai_prompts import SENTIMENT_URGENCY_PROMPT, TITLE_SUGGEST_PROMPT
 from tickets.llm_prompt import SYSTEM_PROMPT
 from tickets.models import Ticket
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CLASSIFICATION = {
     "suggested_category": "general",
@@ -21,13 +24,56 @@ DEFAULT_SENTIMENT_URGENCY = {
 DEFAULT_TITLE = "Support request"
 PREFERRED_TITLE_MAX_LENGTH = 60
 HARD_TITLE_MAX_LENGTH = 120
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 3.5
+DEFAULT_OPENAI_MAX_RETRIES = 0
+
+
+def _env_float(name: str, default: float, *, min_value: float | None = None) -> float:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+
+    try:
+        parsed = float(raw_value)
+    except ValueError:
+        return default
+
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
+
+
+def _env_int(name: str, default: int, *, min_value: int | None = None) -> int:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return default
+
+    if min_value is not None and parsed < min_value:
+        return default
+    return parsed
 
 
 def _get_client() -> OpenAI | None:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         return None
-    return OpenAI(api_key=api_key, timeout=7.0)
+
+    timeout = _env_float(
+        "OPENAI_TIMEOUT_SECONDS",
+        DEFAULT_OPENAI_TIMEOUT_SECONDS,
+        min_value=0.1,
+    )
+    max_retries = _env_int(
+        "OPENAI_MAX_RETRIES",
+        DEFAULT_OPENAI_MAX_RETRIES,
+        min_value=0,
+    )
+    return OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
 
 
 def _model_name() -> str:
@@ -174,6 +220,7 @@ def classify_ticket(description: str) -> dict[str, str]:
         validated = _validate_classification_payload(parsed)
         return validated or DEFAULT_CLASSIFICATION.copy()
     except Exception:
+        logger.warning("AI classification failed; using default classification.")
         return DEFAULT_CLASSIFICATION.copy()
 
 
@@ -209,6 +256,7 @@ def suggest_title(description: str) -> str:
         normalized = _normalize_title(parsed.get("suggested_title"))
         return normalized or fallback_title
     except Exception:
+        logger.warning("AI title suggestion failed; using fallback title.")
         return fallback_title
 
 
@@ -245,4 +293,5 @@ def score_sentiment_urgency(title: str, description: str) -> dict[str, Any]:
         validated = _validate_sentiment_urgency_payload(parsed)
         return validated or DEFAULT_SENTIMENT_URGENCY.copy()
     except Exception:
+        logger.warning("AI sentiment/urgency scoring failed; using defaults.")
         return DEFAULT_SENTIMENT_URGENCY.copy()

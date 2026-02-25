@@ -7,6 +7,7 @@ from django.test.utils import override_settings
 from rest_framework.test import APIClient
 
 from .models import Ticket
+from .services import llm
 
 
 @override_settings(ALLOWED_HOSTS=["testserver", "localhost", "127.0.0.1"])
@@ -157,3 +158,59 @@ class TicketApiTests(TestCase):
                     priority="low",
                     urgency_score=101,
                 )
+
+
+class LLMServiceTests(TestCase):
+    @patch("tickets.services.llm.OpenAI")
+    @patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "sk-test",
+            "OPENAI_TIMEOUT_SECONDS": "",
+            "OPENAI_MAX_RETRIES": "",
+        },
+        clear=False,
+    )
+    def test_get_client_uses_fail_fast_defaults(self, mock_openai):
+        llm._get_client()
+
+        mock_openai.assert_called_once()
+        _, kwargs = mock_openai.call_args
+        self.assertEqual(kwargs["timeout"], llm.DEFAULT_OPENAI_TIMEOUT_SECONDS)
+        self.assertEqual(kwargs["max_retries"], llm.DEFAULT_OPENAI_MAX_RETRIES)
+
+    @patch("tickets.services.llm.OpenAI")
+    @patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "sk-test",
+            "OPENAI_TIMEOUT_SECONDS": "2.25",
+            "OPENAI_MAX_RETRIES": "1",
+        },
+        clear=False,
+    )
+    def test_get_client_honors_env_timeout_and_retries(self, mock_openai):
+        llm._get_client()
+
+        mock_openai.assert_called_once()
+        _, kwargs = mock_openai.call_args
+        self.assertEqual(kwargs["timeout"], 2.25)
+        self.assertEqual(kwargs["max_retries"], 1)
+
+    @patch("tickets.services.llm.OpenAI")
+    @patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "sk-test",
+            "OPENAI_TIMEOUT_SECONDS": "-5",
+            "OPENAI_MAX_RETRIES": "not-an-int",
+        },
+        clear=False,
+    )
+    def test_get_client_ignores_invalid_env_values(self, mock_openai):
+        llm._get_client()
+
+        mock_openai.assert_called_once()
+        _, kwargs = mock_openai.call_args
+        self.assertEqual(kwargs["timeout"], llm.DEFAULT_OPENAI_TIMEOUT_SECONDS)
+        self.assertEqual(kwargs["max_retries"], llm.DEFAULT_OPENAI_MAX_RETRIES)

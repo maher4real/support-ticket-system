@@ -52,8 +52,19 @@ const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').r
   /\/$/,
   '',
 )
+const defaultTimeoutMs = (() => {
+  const raw = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000)
+  if (!Number.isFinite(raw) || raw < 1000) {
+    return 15000
+  }
+  return Math.floor(raw)
+})()
 
-async function request<T>(path: string, init?: RequestInit, timeoutMs = 10000): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = defaultTimeoutMs,
+): Promise<T> {
   const controller = new AbortController()
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
 

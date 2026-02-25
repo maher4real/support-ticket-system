@@ -106,6 +106,8 @@ POSTGRES_HOST=db
 POSTGRES_PORT=5432
 OPENAI_API_KEY=
 OPENAI_CLASSIFY_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT_SECONDS=3.5
+OPENAI_MAX_RETRIES=0
 ```
 
 ### Render backend (`backend/.env.render.example`)
@@ -119,11 +121,15 @@ CSRF_TRUSTED_ORIGINS=https://your-frontend-name.vercel.app
 DATABASE_URL=postgresql://user:password@host:5432/database
 OPENAI_API_KEY=
 OPENAI_CLASSIFY_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT_SECONDS=3.5
+OPENAI_MAX_RETRIES=0
 ```
 
 Notes:
 
 - `OPENAI_API_KEY` is optional. Core CRUD still works without it.
+- `OPENAI_TIMEOUT_SECONDS` controls per-request OpenAI timeout (default `3.5`).
+- `OPENAI_MAX_RETRIES` controls OpenAI SDK retries (default `0` to fail fast).
 - `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` must include `https://` and must not include a trailing slash.
 - If `DATABASE_URL` is empty in local Docker, backend uses `POSTGRES_*` values.
 
@@ -146,6 +152,8 @@ This repo includes `render.yaml` for backend + Postgres provisioning.
    - `CORS_ALLOWED_ORIGINS` (example: `https://your-app.vercel.app`)
    - `CSRF_TRUSTED_ORIGINS` (example: `https://your-app.vercel.app`)
    - `OPENAI_API_KEY` (optional)
+   - `OPENAI_TIMEOUT_SECONDS` (optional, default `3.5`)
+   - `OPENAI_MAX_RETRIES` (optional, default `0`)
 5. Redeploy.
 6. Verify:
    - `https://<render-domain>/api/tickets/`
@@ -159,6 +167,7 @@ This repo includes `render.yaml` for backend + Postgres provisioning.
 2. Set project root directory to `frontend`.
 3. Add env var:
    - `VITE_API_BASE_URL=https://<render-domain>`
+   - `VITE_API_TIMEOUT_MS=15000` (optional)
 4. Deploy/redeploy.
 5. Open the site and test ticket flows.
 
@@ -256,6 +265,7 @@ docker compose exec frontend npm run build
 - Build passes but health check fails on Render (`400`): verify `ALLOWED_HOSTS`.
 - CORS/CSRF errors: ensure origin values include `https://` and have no trailing slash.
 - AI endpoints returning fallback values: verify `OPENAI_API_KEY`.
+- Intermittent request timeouts during AI calls: reduce `OPENAI_TIMEOUT_SECONDS` and keep `OPENAI_MAX_RETRIES=0`.
 - Local DB issues: run migrations again:
 
 ```bash
