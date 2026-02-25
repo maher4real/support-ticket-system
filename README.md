@@ -8,6 +8,7 @@ Repository: [https://github.com/maher4real/support-ticket-system](https://github
 
 - Frontend (Vercel): `https://support-ticket-system-ai.vercel.app`
 - Backend API base (Render): `https://support-ticket-backend-yek7.onrender.com/api/`
+- Backend tickets endpoint: `https://support-ticket-backend-yek7.onrender.com/api/tickets/`
 
 ## Features
 
