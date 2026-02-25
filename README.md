@@ -1,74 +1,103 @@
 # Support Ticket System
 
-An end-to-end Support Ticket System built with Django REST Framework, React (Vite), PostgreSQL, and Docker Compose.
+End-to-end support ticket platform with a Django REST backend, React frontend, PostgreSQL, and AI-assisted ticket workflows.
 
-## GitHub Repository
+Repository: [https://github.com/maher4real/support-ticket-system](https://github.com/maher4real/support-ticket-system)
 
-[https://github.com/maher4real/support-ticket-system](https://github.com/maher4real/support-ticket-system)
+## Live URLs
 
-This project supports:
+- Frontend (Vercel): `https://support-ticket-system-ai.vercel.app`
+- Backend API base (Render): `https://support-ticket-backend-yek7.onrender.com/api/`
 
-- Ticket creation, listing, filtering, search, and status updates
-- DB-level enforced constraints for all enum/range fields
-- AI-powered category/priority classification
-- AI-powered title suggestion
-- AI-powered sentiment + urgency scoring
-- Live stats dashboard using DB-level aggregation (no Python row loops)
+## Features
+
+### Core Ticket Management
+
+- Create, list, search, filter, and update tickets
+- Status workflow: `open`, `in_progress`, `resolved`, `closed`
+- Priority levels: `low`, `medium`, `high`, `critical`
+- Category types: `billing`, `technical`, `account`, `general`
+- Server-side validation and DB-level integrity checks
+
+### AI Capabilities
+
+- AI category + priority classification from description
+- AI title suggestion from ticket description
+- AI sentiment + urgency scoring (`0..100`)
+- Graceful fallback behavior when OpenAI key/model is missing or unavailable
+
+### Dashboard Analytics
+
+- Total and open ticket counts
+- Average tickets per day
+- Priority/category/sentiment breakdowns
+- Average urgency score
+- Implemented with DB-level aggregation (no Python row-loop analytics)
+
+### Production-Ready Deployment Split
+
+- Frontend deployment target: Vercel
+- Backend + Postgres deployment target: Render
+- Local Docker fallback remains supported for development
 
 ## Tech Stack
 
-- Backend: Django 5 + Django REST Framework + django-filter
+- Backend: Django 5, Django REST Framework, django-filter
+- Frontend: React 19, TypeScript, Vite
 - Database: PostgreSQL 15
-- Frontend: React + TypeScript + Vite
-- AI: OpenAI API (`gpt-4o-mini` by default, configurable)
-- Infra: Docker + Docker Compose
+- AI: OpenAI API (`gpt-4o-mini` default)
+- Runtime/Infra: Docker Compose (local), Gunicorn + WhiteNoise (production)
 
-## Architecture
+## Project Structure
 
-- `backend/`: Django project (`config`) + app (`tickets`)
-- `frontend/`: React app (Vite)
-- `docker-compose.yml`: local multi-service orchestration
+```text
+support-ticket-system/
+├── backend/                  # Django API
+│   ├── config/               # settings, urls, wsgi/asgi
+│   ├── tickets/              # models, serializers, views, AI services
+│   └── requirements.txt
+├── frontend/                 # React + Vite app
+│   ├── src/
+│   ├── public/
+│   └── vercel.json
+├── docker-compose.yml        # local full-stack orchestration
+├── render.yaml               # Render Blueprint (backend + Postgres)
+└── README.md
+```
 
-Main backend files:
+## Local Development (Docker)
 
-- `backend/tickets/models.py` (Ticket schema + DB constraints)
-- `backend/tickets/views.py` (API endpoints)
-- `backend/tickets/serializers.py` (validation + API shapes)
-- `backend/tickets/services/llm.py` (AI integration, strict schema, fallbacks)
-- `backend/tickets/llm_prompt.py` (classify prompt)
-- `backend/tickets/ai_prompts.py` (title + sentiment/urgency prompts)
-
-## Quick Start (Reviewer-Friendly)
-
-### 1) Configure env
-
-Use the included template:
+### 1. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` as needed.
-
-### 2) Run the full stack
+### 2. Start services
 
 ```bash
 docker compose up --build
 ```
 
-### 3) Open the app
+### 3. Open locally
 
-- Frontend: [http://localhost:5173](http://localhost:5173)
-- Backend API root: [http://localhost:8000/api/tickets/](http://localhost:8000/api/tickets/)
-- Stats endpoint: [http://localhost:8000/api/tickets/stats/](http://localhost:8000/api/tickets/stats/)
-
-These links work once `docker compose up --build` is running successfully.
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000/api/tickets/`
+- Stats: `http://localhost:8000/api/tickets/stats/`
 
 ## Environment Variables
 
-Set in `.env` (and consumed by Docker Compose):
+### Local (`.env`)
+
+Template: `.env.example`
 
 ```env
+DEBUG=True
+ALLOWED_HOSTS=localhost,127.0.0.1,testserver
+CORS_ALLOWED_ORIGINS=
+CSRF_TRUSTED_ORIGINS=
+DATABASE_URL=
+
 POSTGRES_DB=tickets
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
@@ -78,74 +107,69 @@ OPENAI_API_KEY=
 OPENAI_CLASSIFY_MODEL=gpt-4o-mini
 ```
 
+### Render backend (`backend/.env.render.example`)
+
+```env
+DEBUG=False
+SECRET_KEY=replace-with-strong-secret
+ALLOWED_HOSTS=your-backend-name.onrender.com
+CORS_ALLOWED_ORIGINS=https://your-frontend-name.vercel.app
+CSRF_TRUSTED_ORIGINS=https://your-frontend-name.vercel.app
+DATABASE_URL=postgresql://user:password@host:5432/database
+OPENAI_API_KEY=
+OPENAI_CLASSIFY_MODEL=gpt-4o-mini
+```
+
 Notes:
 
-- `OPENAI_API_KEY` is optional for local run.
-- If key is missing/unreachable, AI endpoints gracefully fallback and core ticket operations still work.
-- No secrets are hardcoded in source.
-- For Render production envs, use `backend/.env.render.example` as a template.
+- `OPENAI_API_KEY` is optional. Core CRUD still works without it.
+- `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` must include `https://` and must not include a trailing slash.
+- If `DATABASE_URL` is empty in local Docker, backend uses `POSTGRES_*` values.
 
-## Docker Behavior
+## Deployment
 
-`docker-compose.yml` includes:
+### Backend on Render (Blueprint)
 
-- `db` healthcheck with `pg_isready`
-- `backend` depends on healthy DB
-- backend startup runs migrations automatically before server start
-- fixed required ports:
-  - DB: `5432`
-  - Backend: `8000`
-  - Frontend: `5173`
+This repo includes `render.yaml` for backend + Postgres provisioning.
 
-### Local Docker Fallback
+### Steps
 
-Local Docker workflow remains supported.
-
-- If `DATABASE_URL` is empty (default), backend uses `POSTGRES_*` values from Compose (`db:5432`).
-- If `DATABASE_URL` is set, backend uses it instead (useful for non-Docker or managed DB targets).
-- Local-safe defaults are provided in `.env.example` (`DEBUG=True`, permissive local hosts/CORS).
-
-## Deployment (Vercel + Render)
-
-### Backend on Render
-
-This repository includes a Render Blueprint at `render.yaml`.
-
-1. In Render Dashboard, create a new Blueprint and select this repo.
-2. Render will create:
-   - web service: `support-ticket-backend` (root dir `backend/`)
-   - PostgreSQL database: `support-ticket-db`
-3. Fill required env vars (marked `sync: false` in `render.yaml`):
+1. Render Dashboard -> New -> Blueprint.
+2. Select this repository and deploy from `main`.
+3. Render creates:
+   - Web service: `support-ticket-backend`
+   - Postgres database: `support-ticket-db`
+4. Set required environment values in Render:
    - `SECRET_KEY`
-   - `ALLOWED_HOSTS` (example: `support-ticket-backend.onrender.com`)
-   - `CORS_ALLOWED_ORIGINS` (example: `https://your-frontend.vercel.app`)
-   - `CSRF_TRUSTED_ORIGINS` (example: `https://your-frontend.vercel.app`)
+   - `ALLOWED_HOSTS` (example: `.onrender.com` or exact service host)
+   - `CORS_ALLOWED_ORIGINS` (example: `https://your-app.vercel.app`)
+   - `CSRF_TRUSTED_ORIGINS` (example: `https://your-app.vercel.app`)
    - `OPENAI_API_KEY` (optional)
-4. Build/start commands are already configured:
-   - build: `pip install -r requirements.txt && python manage.py migrate && python manage.py collectstatic --no-input`
-   - start: `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT`
-5. After deploy, verify:
-   - `https://<your-render-domain>/api/tickets/`
-   - `https://<your-render-domain>/api/tickets/stats/`
+5. Redeploy.
+6. Verify:
+   - `https://<render-domain>/api/tickets/`
+   - `https://<render-domain>/api/tickets/stats/`
 
 ### Frontend on Vercel
 
-1. Import this repo into Vercel and set **Root Directory** to `frontend`.
-2. Set frontend env var in Vercel:
-   - `VITE_API_BASE_URL=https://<your-render-domain>`
-3. Deploy. SPA routing support is included via `frontend/vercel.json`.
+### Steps
+
+1. Import this repository in Vercel.
+2. Set project root directory to `frontend`.
+3. Add env var:
+   - `VITE_API_BASE_URL=https://<render-domain>`
+4. Deploy/redeploy.
+5. Open the site and test ticket flows.
+
+SPA routing support is configured in `frontend/vercel.json`.
 
 ## API Reference
 
-All APIs are under `/api/`.
+Base path: `/api/`
 
-### 1) Create Ticket
+### Create Ticket
 
-`POST /api/tickets/`
-
-Creates a ticket.
-
-Request:
+- `POST /api/tickets/`
 
 ```bash
 curl -X POST http://localhost:8000/api/tickets/ \
@@ -158,32 +182,19 @@ curl -X POST http://localhost:8000/api/tickets/ \
   }'
 ```
 
-Response: `201 Created` with ticket JSON (includes `sentiment` and `urgency_score`).
+### List Tickets
 
-### 2) List Tickets
-
-`GET /api/tickets/`
-
-Supports:
-
-- `?category=`
-- `?priority=`
-- `?status=`
-- `?search=` (searches title + description)
-
-Example:
+- `GET /api/tickets/`
+- Filters: `category`, `priority`, `status`
+- Search: `search` (title + description)
 
 ```bash
 curl "http://localhost:8000/api/tickets/?category=technical&status=open&search=timeout"
 ```
 
-Response: `200 OK`, newest first.
+### Update Ticket
 
-### 3) Update Ticket
-
-`PATCH /api/tickets/<id>/`
-
-Example:
+- `PATCH /api/tickets/<id>/`
 
 ```bash
 curl -X PATCH http://localhost:8000/api/tickets/1/ \
@@ -191,57 +202,22 @@ curl -X PATCH http://localhost:8000/api/tickets/1/ \
   -d '{"status":"resolved"}'
 ```
 
-Response: `200 OK`.
+Behavior:
 
-AI signal recompute rule:
+- Recomputes sentiment/urgency only when `title` or `description` changes.
+- Status-only updates keep existing AI scores.
 
-- Recomputes sentiment/urgency only if `title` or `description` changed.
-- Status-only patch keeps existing AI scores.
+### Stats
 
-### 4) Stats
-
-`GET /api/tickets/stats/`
-
-Example:
+- `GET /api/tickets/stats/`
 
 ```bash
 curl http://localhost:8000/api/tickets/stats/
 ```
 
-Response always includes required shape:
+### AI Classify
 
-```json
-{
-  "total_tickets": 0,
-  "open_tickets": 0,
-  "avg_tickets_per_day": 0.0,
-  "priority_breakdown": {
-    "low": 0,
-    "medium": 0,
-    "high": 0,
-    "critical": 0
-  },
-  "category_breakdown": {
-    "billing": 0,
-    "technical": 0,
-    "account": 0,
-    "general": 0
-  }
-}
-```
-
-Extended fields also included:
-
-- `sentiment_breakdown`
-- `avg_urgency_score`
-
-Implementation uses DB aggregation/annotation (`aggregate`, `annotate`, `TruncDate`, `Avg`, `Count`) and does not loop over ticket rows in Python.
-
-### 5) Classify Description (AI)
-
-`POST /api/tickets/classify/`
-
-Request:
+- `POST /api/tickets/classify/`
 
 ```bash
 curl -X POST http://localhost:8000/api/tickets/classify/ \
@@ -249,29 +225,9 @@ curl -X POST http://localhost:8000/api/tickets/classify/ \
   -d '{"description":"Production checkout fails with 500 for all users"}'
 ```
 
-Response:
+### AI Title Suggestion
 
-```json
-{
-  "suggested_category": "technical",
-  "suggested_priority": "critical"
-}
-```
-
-Fallback (if no key/API failure/invalid output):
-
-```json
-{
-  "suggested_category": "general",
-  "suggested_priority": "low"
-}
-```
-
-### 6) Suggest Title (AI)
-
-`POST /api/tickets/suggest-title/`
-
-Request:
+- `POST /api/tickets/suggest-title/`
 
 ```bash
 curl -X POST http://localhost:8000/api/tickets/suggest-title/ \
@@ -279,79 +235,7 @@ curl -X POST http://localhost:8000/api/tickets/suggest-title/ \
   -d '{"description":"Payment was charged twice and invoice totals are incorrect"}'
 ```
 
-Response:
-
-```json
-{
-  "suggested_title": "Duplicate Billing and Incorrect Invoice Totals"
-}
-```
-
-Rules:
-
-- non-empty string
-- preferred short title
-- max length enforced in backend
-
-Fallback:
-
-- first sentence trimmed to short length
-- or `"Support request"`
-
-## Data Model + Constraints
-
-Ticket fields:
-
-- `title`: required, max 200
-- `description`: required
-- `category`: `billing|technical|account|general`
-- `priority`: `low|medium|high|critical`
-- `status`: `open|in_progress|resolved|closed` (default `open`)
-- `sentiment`: `calm|neutral|frustrated|angry` (default `neutral`)
-- `urgency_score`: integer `0..100` (default `50`)
-- `created_at`: auto timestamp
-
-DB-level checks are enforced using Django `CheckConstraint` migrations.
-
-## AI Integration Details
-
-Provider/model:
-
-- OpenAI via env var key
-- default model: `gpt-4o-mini` (override with `OPENAI_CLASSIFY_MODEL`)
-
-Reliability behavior:
-
-- Structured outputs via JSON schema (`strict: true`)
-- server-side validation after model response
-- timeout + exception handling in all AI service calls
-- safe fallbacks for every AI feature
-- ticket creation/update never fails due to AI issues
-
-Prompt files:
-
-- classify prompt: `backend/tickets/llm_prompt.py`
-- title/sentiment prompts: `backend/tickets/ai_prompts.py`
-
-## Frontend UX Summary
-
-- Responsive 2-column desktop layout, stacked mobile layout
-- Ticket form:
-  - title + description required
-  - category/priority dropdowns
-  - AI classify while typing description (debounced)
-  - AI title generation action with non-destructive apply behavior
-- Ticket list:
-  - newest first
-  - filter/search controls
-  - status quick update per ticket
-  - sentiment + urgency badges
-- Stats card:
-  - total/open/avg per day
-  - priority/category breakdown
-  - sentiment breakdown + average urgency score
-
-## Quality + Tests
+## Testing and Checks
 
 Backend tests:
 
@@ -366,28 +250,19 @@ docker compose exec frontend npm run lint
 docker compose exec frontend npm run build
 ```
 
-## Requirement Coverage Map
-
-- Model + DB constraints: `backend/tickets/models.py`, `backend/tickets/migrations/0001_initial.py`, `backend/tickets/migrations/0002_ticket_ai_signals.py`
-- CRUD + filters + search + ordering: `backend/tickets/views.py`
-- Stats aggregation (DB-level): `backend/tickets/views.py`
-- AI classify/title/sentiment services: `backend/tickets/services/llm.py`
-- Prompt files: `backend/tickets/llm_prompt.py`, `backend/tickets/ai_prompts.py`
-- Frontend API layer: `frontend/src/api.ts`
-- Frontend UI components: `frontend/src/components/*`, `frontend/src/App.tsx`, `frontend/src/App.css`
-- Docker readiness + env wiring: `docker-compose.yml`, `backend/Dockerfile`
-
 ## Troubleshooting
 
-- If ports are already in use, stop conflicting services and re-run compose.
-- If AI suggestions return fallback values, verify `OPENAI_API_KEY` in `.env` and restart containers.
-- If DB schema mismatch appears, run:
-  ```bash
-  docker compose exec backend python manage.py migrate
-  ```
+- Build passes but health check fails on Render (`400`): verify `ALLOWED_HOSTS`.
+- CORS/CSRF errors: ensure origin values include `https://` and have no trailing slash.
+- AI endpoints returning fallback values: verify `OPENAI_API_KEY`.
+- Local DB issues: run migrations again:
+
+```bash
+docker compose exec backend python manage.py migrate
+```
 
 ## Security Notes
 
-- Do not commit real API keys.
-- `.env` is ignored in git.
-- Use `.env.example` for shared configuration template.
+- Never commit real secrets.
+- `.env` files stay local; use templates for shared setup.
+- Rotate production keys regularly.
