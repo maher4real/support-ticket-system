@@ -584,6 +584,12 @@ button:disabled {
   border-color: #ddd6fe;
 }
 
+.local-sync {
+  background: #ecfeff;
+  color: #0f766e;
+  border-color: #99f6e4;
+}
+
 .status-control {
   display: flex;
   align-items: center;
@@ -669,6 +675,14 @@ button:disabled {
 
 .global-error {
   margin-bottom: 14px;
+}
+
+.global-info {
+  margin-bottom: 14px;
+  border-color: #93c5fd;
+  background:
+    linear-gradient(90deg, rgba(59, 130, 246, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%),
+    #eff6ff;
 }
 
 .stats-content {

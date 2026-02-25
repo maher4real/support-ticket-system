@@ -10,7 +10,7 @@ import type {
 interface StatsCardProps {
   stats: TicketStats | null
   loading: boolean
-  error: string | null
+  notice: string | null
   variant?: 'card' | 'bar'
 }
 
@@ -70,7 +70,7 @@ const sentimentLabels: Record<TicketSentiment, string> = {
 export function StatsCard({
   stats,
   loading,
-  error,
+  notice,
   variant = 'card',
 }: StatsCardProps) {
   const totalTickets = useAnimatedNumber(stats?.total_tickets ?? 0)
@@ -107,7 +107,7 @@ export function StatsCard({
       </div>
 
       {loading ? <p className="muted">Loading stats...</p> : null}
-      {error ? <p className="notice error">{error}</p> : null}
+      {notice ? <p className="notice info">{notice}</p> : null}
 
       {loading ? (
         <div className="stats-skeleton">
@@ -125,7 +125,7 @@ export function StatsCard({
         </div>
       ) : null}
 
-      {!loading && !error && stats ? (
+      {!loading && stats ? (
         <div className="stats-content">
           <div className={`stats-grid ${isBar ? 'stats-grid-bar' : ''}`}>
             <article className="stat-tile">

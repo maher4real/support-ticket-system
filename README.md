@@ -15,6 +15,7 @@ Repository: [https://github.com/maher4real/support-ticket-system](https://github
 ### Core Ticket Management
 
 - Create, list, search, filter, and update tickets
+- Offline-first ticket creation with local queue + automatic background sync
 - Status workflow: `open`, `in_progress`, `resolved`, `closed`
 - Priority levels: `low`, `medium`, `high`, `critical`
 - Category types: `billing`, `technical`, `account`, `general`
@@ -25,6 +26,7 @@ Repository: [https://github.com/maher4real/support-ticket-system](https://github
 - AI category + priority classification from description
 - AI title suggestion from ticket description
 - AI sentiment + urgency scoring (`0..100`)
+- Local heuristic AI fallback when backend is temporarily unavailable
 - Graceful fallback behavior when OpenAI key/model is missing or unavailable
 
 ### Dashboard Analytics
@@ -98,6 +100,8 @@ ALLOWED_HOSTS=localhost,127.0.0.1,testserver
 CORS_ALLOWED_ORIGINS=
 CSRF_TRUSTED_ORIGINS=
 DATABASE_URL=
+DB_CONN_MAX_AGE=600
+DB_CONN_HEALTH_CHECKS=True
 
 POSTGRES_DB=tickets
 POSTGRES_USER=postgres
@@ -119,6 +123,8 @@ ALLOWED_HOSTS=your-backend-name.onrender.com
 CORS_ALLOWED_ORIGINS=https://your-frontend-name.vercel.app
 CSRF_TRUSTED_ORIGINS=https://your-frontend-name.vercel.app
 DATABASE_URL=postgresql://user:password@host:5432/database
+DB_CONN_MAX_AGE=600
+DB_CONN_HEALTH_CHECKS=True
 OPENAI_API_KEY=
 OPENAI_CLASSIFY_MODEL=gpt-4o-mini
 OPENAI_TIMEOUT_SECONDS=3.5
@@ -128,8 +134,11 @@ OPENAI_MAX_RETRIES=0
 Notes:
 
 - `OPENAI_API_KEY` is optional. Core CRUD still works without it.
+- Frontend offline AI fallback uses local heuristics (not full LLM quality) when backend is unavailable.
 - `OPENAI_TIMEOUT_SECONDS` controls per-request OpenAI timeout (default `3.5`).
 - `OPENAI_MAX_RETRIES` controls OpenAI SDK retries (default `0` to fail fast).
+- `DB_CONN_MAX_AGE` controls Django DB connection reuse window (default `600` seconds).
+- `DB_CONN_HEALTH_CHECKS` validates pooled DB connections before reuse (default `True`).
 - `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` must include `https://` and must not include a trailing slash.
 - If `DATABASE_URL` is empty in local Docker, backend uses `POSTGRES_*` values.
 
@@ -168,6 +177,7 @@ This repo includes `render.yaml` for backend + Postgres provisioning.
 3. Add env var:
    - `VITE_API_BASE_URL=https://<render-domain>`
    - `VITE_API_TIMEOUT_MS=15000` (optional)
+   - `VITE_API_READ_RETRY_ATTEMPTS=3` (optional)
 4. Deploy/redeploy.
 5. Open the site and test ticket flows.
 

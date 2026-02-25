@@ -4,7 +4,7 @@ import { FiltersBar, type TicketFilters } from './FiltersBar'
 interface TicketListProps {
   tickets: Ticket[]
   loading: boolean
-  error: string | null
+  notice: string | null
   filters: TicketFilters
   activeFilters: number
   onFiltersChange: (next: TicketFilters) => void
@@ -46,7 +46,7 @@ function formatRelativeTime(value: string): string {
 export function TicketList({
   tickets,
   loading,
-  error,
+  notice,
   filters,
   activeFilters,
   onFiltersChange,
@@ -67,7 +67,7 @@ export function TicketList({
       <FiltersBar filters={filters} onChange={onFiltersChange} />
 
       {loading ? <p className="muted">Loading tickets...</p> : null}
-      {error ? <p className="notice error">{error}</p> : null}
+      {notice ? <p className="notice info">{notice}</p> : null}
 
       <div className="tickets-list">
         {loading
@@ -85,12 +85,13 @@ export function TicketList({
             ))
           : null}
 
-        {!loading && !error && tickets.length === 0 ? (
+        {!loading && tickets.length === 0 ? (
           <p className="empty-state">No tickets yet. Create your first issue on the left.</p>
         ) : null}
 
         {tickets.map((ticket) => {
-          const isUpdating = updatingTicketIds.has(ticket.id)
+          const isLocalOnly = ticket.is_local_only === true
+          const isUpdating = updatingTicketIds.has(ticket.id) || isLocalOnly
           return (
             <article
               className="ticket-item ticket-animated"
@@ -112,6 +113,9 @@ export function TicketList({
                 <span className={`badge status-${ticket.status}`}>{ticket.status}</span>
                 <span className={`badge sentiment-${ticket.sentiment}`}>{ticket.sentiment}</span>
                 <span className="badge urgency-badge">Urgency {ticket.urgency_score}</span>
+                {isLocalOnly ? (
+                  <span className="badge local-sync">pending sync</span>
+                ) : null}
               </div>
 
               <label className="status-control">
@@ -129,7 +133,11 @@ export function TicketList({
                     </option>
                   ))}
                 </select>
-                {isUpdating ? <small className="field-hint">Updating...</small> : null}
+                {isLocalOnly ? (
+                  <small className="field-hint">Waiting for backend sync...</small>
+                ) : isUpdating ? (
+                  <small className="field-hint">Updating...</small>
+                ) : null}
               </label>
             </article>
           )

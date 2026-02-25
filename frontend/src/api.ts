@@ -13,6 +13,8 @@ export interface Ticket {
   sentiment: TicketSentiment
   urgency_score: number
   created_at: string
+  is_local_only?: boolean
+  local_queue_id?: string
 }
 
 export interface CreateTicketPayload {
@@ -59,44 +61,129 @@ const defaultTimeoutMs = (() => {
   }
   return Math.floor(raw)
 })()
+const defaultReadRetryAttempts = (() => {
+  const raw = Number(import.meta.env.VITE_API_READ_RETRY_ATTEMPTS ?? 3)
+  if (!Number.isFinite(raw) || raw < 1 || raw > 5) {
+    return 3
+  }
+  return Math.floor(raw)
+})()
+const retriableHttpStatuses = new Set([408, 425, 429, 500, 502, 503, 504])
+
+export class ApiRequestError extends Error {
+  status: number | null
+  transient: boolean
+  timeout: boolean
+
+  constructor(
+    message: string,
+    options: { status?: number | null; transient?: boolean; timeout?: boolean } = {},
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = options.status ?? null
+    this.transient = options.transient ?? false
+    this.timeout = options.timeout ?? false
+  }
+}
+
+export function isTransientApiError(error: unknown): boolean {
+  if (error instanceof ApiRequestError) {
+    return error.transient || error.timeout
+  }
+  if (!(error instanceof Error)) return false
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes('timed out') ||
+    message.includes('failed to fetch') ||
+    message.includes('network error') ||
+    message.includes('network request failed')
+  )
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, ms)
+  })
+}
+
+function retryDelayMs(attempt: number): number {
+  return Math.min(750 * attempt, 3000)
+}
 
 async function request<T>(
   path: string,
   init?: RequestInit,
   timeoutMs = defaultTimeoutMs,
 ): Promise<T> {
-  const controller = new AbortController()
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const maxAttempts = method === 'GET' ? defaultReadRetryAttempts : 1
+  let lastError: Error | null = null
 
-  let response: Response
-  try {
-    response = await fetch(`${baseUrl}/api/${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      ...init,
-      signal: controller.signal,
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Request timed out. Please try again.')
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController()
+    const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs)
+
+    let response: Response
+    try {
+      response = await fetch(`${baseUrl}/api/${path}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
+        ...init,
+        signal: controller.signal,
+      })
+    } catch (error) {
+      const normalizedError =
+        error instanceof DOMException && error.name === 'AbortError'
+          ? new ApiRequestError('Request timed out. Please try again.', {
+              transient: true,
+              timeout: true,
+            })
+          : error instanceof ApiRequestError
+            ? error
+            : new ApiRequestError(
+                error instanceof Error ? error.message : 'Request failed.',
+                { transient: true },
+              )
+
+      lastError = normalizedError
+      if (attempt < maxAttempts) {
+        await wait(retryDelayMs(attempt))
+        continue
+      }
+      throw normalizedError
+    } finally {
+      globalThis.clearTimeout(timeoutId)
     }
-    throw error
-  } finally {
-    globalThis.clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      if (attempt < maxAttempts && retriableHttpStatuses.has(response.status)) {
+        await wait(retryDelayMs(attempt))
+        continue
+      }
+
+      const contentType = response.headers.get('content-type') ?? ''
+      const payload = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text()
+      throw new ApiRequestError(extractErrorMessage(payload) ?? 'Request failed.', {
+        status: response.status,
+        transient: retriableHttpStatuses.has(response.status),
+      })
+    }
+
+    const contentType = response.headers.get('content-type') ?? ''
+    const payload = contentType.includes('application/json')
+      ? await response.json()
+      : await response.text()
+
+    return payload as T
   }
 
-  const contentType = response.headers.get('content-type') ?? ''
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text()
-
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(payload) ?? 'Request failed.')
-  }
-
-  return payload as T
+  throw lastError ?? new Error('Request failed.')
 }
 
 function extractErrorMessage(payload: unknown): string | null {

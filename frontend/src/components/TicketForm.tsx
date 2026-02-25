@@ -2,14 +2,17 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   classifyTicket,
-  createTicket,
   suggestTitle,
+  type CreateTicketPayload,
   type TicketCategory,
   type TicketPriority,
 } from '../api'
+import { classifyTicketLocally } from '../localAi'
 
 interface TicketFormProps {
-  onTicketCreated: () => Promise<void> | void
+  onCreateTicket: (
+    payload: CreateTicketPayload,
+  ) => Promise<{ queued: boolean }>
 }
 
 const categoryOptions: Array<{ label: string; value: TicketCategory }> = [
@@ -40,7 +43,7 @@ function buildQuickTitle(description: string): string {
   return candidate.slice(0, QUICK_TITLE_MAX_LENGTH).trimEnd()
 }
 
-export function TicketForm({ onTicketCreated }: TicketFormProps) {
+export function TicketForm({ onCreateTicket }: TicketFormProps) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<TicketCategory>('general')
@@ -89,7 +92,16 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
           setClassifyNotice(null)
         } catch {
           if (classifyRequestIdRef.current === requestId) {
-            setClassifyNotice('Suggestion unavailable. You can continue manually.')
+            const localSuggestion = classifyTicketLocally(trimmed)
+            if (!categoryManuallyEdited) {
+              setCategory(localSuggestion.suggested_category)
+            }
+            if (!priorityManuallyEdited) {
+              setPriority(localSuggestion.suggested_priority)
+            }
+            setClassifyNotice(
+              'Backend unavailable. Applied offline smart suggestion.',
+            )
           }
         } finally {
           if (classifyRequestIdRef.current === requestId) {
@@ -171,7 +183,7 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
 
     try {
       setIsSaving(true)
-      await createTicket({
+      const result = await onCreateTicket({
         title: trimmedTitle,
         description: trimmedDescription,
         category,
@@ -188,7 +200,11 @@ export function TicketForm({ onTicketCreated }: TicketFormProps) {
       setClassifyNotice(null)
       setTitleSuggestionNotice(null)
       setPendingSuggestedTitle(null)
-      await onTicketCreated()
+      if (result.queued) {
+        setTitleSuggestionNotice(
+          'Saved locally. It will sync automatically when backend is online.',
+        )
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to create ticket right now.',
